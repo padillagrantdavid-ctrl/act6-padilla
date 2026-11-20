@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Information</title>
+    <title>Student API Interface</title>
     <style>
         :root {
             --navy: #111827;
@@ -107,12 +107,12 @@
             transform: translateY(-1px);
         }
 
-        button:focus-visible, input:focus-visible {
+        button:focus-visible, input:focus-visible, select:focus-visible {
             outline: 3px solid rgba(37, 99, 235, 0.24);
             outline-offset: 2px;
         }
 
-        input {
+        input, select {
             width: min(360px, 100%);
             border: 1px solid #d1d5db;
             border-radius: 10px;
@@ -167,6 +167,31 @@
             color: var(--muted);
         }
 
+        .student-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .student-record h3 {
+            margin: 0 0 8px;
+            color: var(--navy);
+            font-size: 1rem;
+        }
+
+        .student-record p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         @media (max-width: 720px) {
             .shell { padding: 28px 16px 40px; }
             .header { align-items: flex-start; flex-direction: column; }
@@ -174,6 +199,8 @@
             .card-wide { grid-column: auto; }
             .profile-grid { grid-template-columns: 1fr; }
             .greeting-row { align-items: stretch; flex-direction: column; }
+            .student-list { grid-template-columns: 1fr; }
+            .filter-row { align-items: stretch; flex-direction: column; }
         }
     </style>
 </head>
@@ -181,7 +208,7 @@
     <main class="shell">
         <header class="header">
             <div>
-                <p class="eyebrow">Student Portal</p>
+                <p class="eyebrow">Student API Interface</p>
                 <h1>Grant David Padilla</h1>
             </div>
             <span class="badge">ID 24-00170</span>
@@ -190,33 +217,82 @@
         <div class="grid">
             <section class="card card-wide">
                 <h2>Student Information</h2>
-                <button type="button" onclick="loadStudent()">Load student details</button>
+                <button type="button" onclick="loadStudent()">Load Student Information</button>
                 <div id="result" class="profile-grid" style="margin-top:16px"></div>
             </section>
 
             <section class="card">
-                <h2>Greeting</h2>
+                <h2>Greeting API</h2>
                 <div class="greeting-row">
-                    <input type="text" id="nameInput" placeholder="Enter your name">
-                    <button type="button" onclick="sayHello()">Say hello</button>
+                    <input type="text" id="nameInput" placeholder="Enter your first name">
+                    <button type="button" onclick="sayHello()">Say Hello</button>
                 </div>
                 <p id="greeting"></p>
             </section>
 
             <section class="card">
-                <h2>Academic Profile</h2>
-                <button type="button" onclick="loadAcademic()">Load academic profile</button>
+                <h2>Custom API: Academic Profile</h2>
+                <button type="button" onclick="loadAcademic()">Load Academic Profile</button>
                 <div id="academicResult" class="profile-grid" style="margin-top:16px"></div>
+            </section>
+
+            <section class="card card-wide">
+                <h2>Students from Database</h2>
+                <button type="button" onclick="loadStudents()">Load Students</button>
+                <div id="studentList" class="student-list" aria-live="polite"></div>
+            </section>
+
+            <section class="card card-wide">
+                <h2>Custom Database API: Students by Section</h2>
+                <div class="filter-row">
+                    <label for="sectionFilter">Choose a section:</label>
+                    <select id="sectionFilter">
+                        <option value="A">Section A</option>
+                        <option value="B">Section B</option>
+                        <option value="C">Section C</option>
+                    </select>
+                    <button type="button" onclick="loadStudentsBySection()">Find Students</button>
+                </div>
+                <div id="sectionResults" class="student-list" aria-live="polite"></div>
             </section>
         </div>
     </main>
 
     <script>
-        function dataRow(label, value) {
-            return '<div class="data-row">' +
-                '<span class="data-label">' + label + '</span>' +
-                '<span class="data-value">' + value + '</span>' +
-                '</div>';
+        function renderProfile(target, entries) {
+            target.replaceChildren();
+            entries.forEach(([label, value]) => {
+                const row = document.createElement('div');
+                row.className = 'data-row';
+                const dataLabel = document.createElement('span');
+                dataLabel.className = 'data-label';
+                dataLabel.textContent = label;
+                const dataValue = document.createElement('span');
+                dataValue.className = 'data-value';
+                dataValue.textContent = value;
+                row.append(dataLabel, dataValue);
+                target.appendChild(row);
+            });
+        }
+
+        function renderStudentRecords(target, students) {
+            target.replaceChildren();
+            if (students.length === 0) {
+                target.textContent = 'No student records found.';
+                return;
+            }
+
+            students.forEach(student => {
+                const record = document.createElement('article');
+                record.className = 'data-row student-record';
+                const heading = document.createElement('h3');
+                heading.textContent = student.student_id + ' - ' + student.name;
+                const details = document.createElement('p');
+                details.textContent = student.program + ' | Year ' + student.year +
+                    ' | Section ' + student.section + ' | Database ID ' + student.id;
+                record.append(heading, details);
+                target.appendChild(record);
+            });
         }
 
         function loadStudent() {
@@ -225,12 +301,13 @@
             fetch('/student')
                 .then(response => response.json())
                 .then(data => {
-                    result.innerHTML =
-                        dataRow('Student ID', data.student_id) +
-                        dataRow('Name', data.name) +
-                        dataRow('Program', data.program) +
-                        dataRow('Year Level', data.year) +
-                        dataRow('Section', data.section);
+                    renderProfile(result, [
+                        ['Student ID', data.student_id],
+                        ['Name', data.name],
+                        ['Program', data.program],
+                        ['Year Level', data.year],
+                        ['Section', data.section]
+                    ]);
                 })
                 .catch(error => {
                     result.innerHTML = '<p>Unable to retrieve data.</p>';
@@ -255,15 +332,49 @@
             fetch('/academic')
                 .then(response => response.json())
                 .then(data => {
-                    result.innerHTML =
-                        dataRow('Student ID', data.student_id) +
-                        dataRow('Name', data.name) +
-                        dataRow('Program', data.program) +
-                        dataRow('Year Level', data.year) +
-                        dataRow('Section', data.section);
+                    renderProfile(result, [
+                        ['Student ID', data.student_id],
+                        ['Name', data.name],
+                        ['Program', data.program],
+                        ['Year Level', data.year],
+                        ['Section', data.section]
+                    ]);
                 })
                 .catch(error => {
                     result.innerHTML = '<p>Unable to retrieve academic profile.</p>';
+                });
+        }
+
+        function loadStudents() {
+            const studentList = document.getElementById('studentList');
+            studentList.textContent = 'Loading student records...';
+            fetch('/students')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Unable to retrieve student records.');
+                    }
+                    return response.json();
+                })
+                .then(students => renderStudentRecords(studentList, students))
+                .catch(error => {
+                    studentList.textContent = 'Unable to retrieve student records.';
+                });
+        }
+
+        function loadStudentsBySection() {
+            const section = document.getElementById('sectionFilter').value;
+            const results = document.getElementById('sectionResults');
+            results.textContent = 'Loading section records...';
+            fetch('/students/section/' + encodeURIComponent(section))
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Unable to retrieve section records.');
+                    }
+                    return response.json();
+                })
+                .then(students => renderStudentRecords(results, students))
+                .catch(error => {
+                    results.textContent = 'Unable to retrieve section records.';
                 });
         }
     </script>

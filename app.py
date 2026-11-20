@@ -1,7 +1,11 @@
+import sqlite3
+from pathlib import Path
+
 from flask import Flask, jsonify, render_template, request
 
 
 app = Flask(__name__)
+DATABASE = Path(__file__).with_name("students.db")
 
 STUDENT_PROFILE = {
 	"student_id": "24-00170",
@@ -39,6 +43,50 @@ def get_academic_profile():
 			"section": STUDENT_PROFILE["section"],
 		}
 	)
+
+
+def get_db_connection():
+	conn = sqlite3.connect(DATABASE)
+	conn.row_factory = sqlite3.Row
+	return conn
+
+
+@app.route("/students")
+def get_students():
+	conn = get_db_connection()
+	try:
+		students = conn.execute("SELECT * FROM students ORDER BY id").fetchall()
+		return jsonify([dict(student) for student in students])
+	finally:
+		conn.close()
+
+
+@app.route("/students/<int:student_db_id>")
+def get_student_by_id(student_db_id):
+	conn = get_db_connection()
+	try:
+		student = conn.execute(
+			"SELECT * FROM students WHERE id = ?", (student_db_id,)
+		).fetchone()
+	finally:
+		conn.close()
+
+	if student is None:
+		return jsonify({"error": "Student not found"}), 404
+	return jsonify(dict(student))
+
+
+@app.route("/students/section/<section>")
+def get_students_by_section(section):
+	conn = get_db_connection()
+	try:
+		students = conn.execute(
+			"SELECT * FROM students WHERE upper(section) = ? ORDER BY id",
+			(section.upper(),),
+		).fetchall()
+		return jsonify([dict(student) for student in students])
+	finally:
+		conn.close()
 
 
 if __name__ == "__main__":
